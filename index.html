@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CropScope · Crop Disease Diagnostic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" fill="none">
+        <path d="M16 4C10 4 5 9 5 15c0 7 6 12 11 13 5-1 11-6 11-13 0-6-5-11-11-11z" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M16 8v20M16 13c-3-3-7-2-7-2s0 4 3 6M16 18c3-3 7-2 7-2s0 4-3 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div class="brand-name">CropScope</div>
+        <div class="brand-sub">Diagnostic Console</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item is-active" data-view="scanner">
+        <span class="nav-dot"></span>Scanner
+      </button>
+      <button class="nav-item" data-view="history">
+        <span class="nav-dot"></span>Scan History
+      </button>
+      <button class="nav-item" data-view="stats">
+        <span class="nav-dot"></span>Field Stats
+      </button>
+      <button class="nav-item" data-view="about">
+        <span class="nav-dot"></span>About
+      </button>
+    </nav>
+
+    <div class="sidebar-readout">
+      <div class="readout-label">Model</div>
+      <div class="readout-value">EfficientNet-B0</div>
+      <div class="readout-label">Classes</div>
+      <div class="readout-value" id="sb-classes">39</div>
+      <div class="readout-label">Input</div>
+      <div class="readout-value">160×160 RGB</div>
+    </div>
+
+    <div class="status-pill" id="model-status">
+      <span class="pulse"></span> Model idle
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- SCANNER VIEW -->
+    <section class="view is-active" id="view-scanner">
+      <header class="view-head">
+        <div>
+          <h1>Leaf Scanner</h1>
+          <p>Upload a leaf photo. The model reads texture, lesion pattern, and color against 39 trained conditions.</p>
+        </div>
+      </header>
+
+      <div class="scanner-grid">
+        <div class="panel dropzone-panel">
+          <div class="dropzone" id="dropzone">
+            <input type="file" id="file-input" accept="image/*" hidden>
+            <div id="dz-empty" class="dz-empty">
+              <svg viewBox="0 0 48 48" fill="none" class="dz-icon">
+                <rect x="6" y="6" width="36" height="36" rx="3" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="17" cy="18" r="3.5" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M6 32l10-10 8 8 6-6 12 12" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              </svg>
+              <p><strong>Drop a leaf image</strong> or click to browse</p>
+              <span class="dz-hint">JPG / PNG · resized to 160×160</span>
+            </div>
+            <img id="dz-preview" class="dz-preview" hidden alt="Uploaded leaf preview">
+            <div class="scan-frame" id="scan-frame" hidden>
+              <span class="corner tl"></span><span class="corner tr"></span>
+              <span class="corner bl"></span><span class="corner br"></span>
+              <div class="scan-line"></div>
+            </div>
+          </div>
+          <div class="dropzone-actions">
+            <button class="btn btn-ghost" id="btn-clear" disabled>Clear</button>
+            <button class="btn btn-primary" id="btn-analyze" disabled>Run Diagnostic</button>
+          </div>
+        </div>
+
+        <div class="panel result-panel">
+          <div class="panel-title">Diagnostic Readout</div>
+
+          <div id="result-empty" class="result-empty">
+            <span class="gauge-ghost"></span>
+            <p>Awaiting sample</p>
+          </div>
+
+          <div id="result-body" class="result-body" hidden>
+            <div class="gauge-wrap">
+              <svg viewBox="0 0 200 120" class="gauge-svg" id="gauge-svg">
+                <path d="M20 110 A80 80 0 0 1 180 110" class="gauge-track"/>
+                <path d="M20 110 A80 80 0 0 1 180 110" class="gauge-fill" id="gauge-fill"/>
+              </svg>
+              <div class="gauge-readout">
+                <span class="gauge-value" id="gauge-value">0%</span>
+                <span class="gauge-caption">confidence</span>
+              </div>
+            </div>
+
+            <div class="verdict" id="verdict">
+              <span class="verdict-status" id="verdict-status">—</span>
+              <span class="verdict-crop" id="verdict-crop">—</span>
+              <span class="verdict-condition" id="verdict-condition">—</span>
+            </div>
+
+            <div class="top3">
+              <div class="top3-label">Top matches</div>
+              <div class="top3-list" id="top3-list"></div>
+            </div>
+
+            <div class="meta-row">
+              <span>Inference <b id="meta-ms">—</b></span>
+              <span>Scan ID <b id="meta-id">—</b></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORY VIEW -->
+    <section class="view" id="view-history">
+      <header class="view-head">
+        <div>
+          <h1>Scan History</h1>
+          <p>Every diagnostic run this session, most recent first.</p>
+        </div>
+        <button class="btn btn-ghost" id="btn-refresh-history">Refresh</button>
+      </header>
+      <div class="panel table-panel">
+        <table class="log-table">
+          <thead>
+            <tr><th>Time</th><th>Crop</th><th>Condition</th><th>Status</th><th>Confidence</th><th>Latency</th></tr>
+          </thead>
+          <tbody id="history-body">
+            <tr class="empty-row"><td colspan="6">No scans yet — run a diagnostic to populate this log.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- STATS VIEW -->
+    <section class="view" id="view-stats">
+      <header class="view-head">
+        <div>
+          <h1>Field Stats</h1>
+          <p>Aggregate signal across all scans in this session.</p>
+        </div>
+      </header>
+      <div class="stats-grid">
+        <div class="panel stat-card"><div class="stat-label">Total Scans</div><div class="stat-value" id="st-total">0</div></div>
+        <div class="panel stat-card"><div class="stat-label">Healthy</div><div class="stat-value status-teal" id="st-healthy">0</div></div>
+        <div class="panel stat-card"><div class="stat-label">Diseased</div><div class="stat-value status-coral" id="st-diseased">0</div></div>
+        <div class="panel stat-card"><div class="stat-label">Avg Confidence</div><div class="stat-value" id="st-conf">0%</div></div>
+        <div class="panel stat-card"><div class="stat-label">Avg Latency</div><div class="stat-value" id="st-latency">0 ms</div></div>
+        <div class="panel stat-card"><div class="stat-label">Most Scanned Crop</div><div class="stat-value stat-value-sm" id="st-crop">—</div></div>
+        <div class="panel stat-card wide"><div class="stat-label">Most Common Condition</div><div class="stat-value stat-value-sm" id="st-condition">—</div></div>
+        <div class="panel stat-card"><div class="stat-label">Classes Supported</div><div class="stat-value" id="st-classes">39</div></div>
+      </div>
+    </section>
+
+    <!-- ABOUT VIEW -->
+    <section class="view" id="view-about">
+      <header class="view-head">
+        <div>
+          <h1>About CropScope</h1>
+          <p>How this diagnostic console works, end to end.</p>
+        </div>
+      </header>
+      <div class="about-grid">
+        <div class="panel about-panel">
+          <div class="panel-title">Pipeline</div>
+          <ol class="pipeline">
+            <li><span>Capture</span>A leaf photo is uploaded and resized to 160×160 RGB.</li>
+            <li><span>Backbone</span>EfficientNet-B0, pretrained on ImageNet, extracts visual features.</li>
+            <li><span>Head</span>Global average pooling → dropout → a 39-way softmax classifier.</li>
+            <li><span>Readout</span>The top prediction and two runner-ups are surfaced with confidence scores.</li>
+          </ol>
+        </div>
+        <div class="panel about-panel">
+          <div class="panel-title">Coverage</div>
+          <p class="about-text">Trained on a PlantVillage-style leaf dataset spanning 14 crops — apple, blueberry, cherry, corn, grape, orange, peach, bell pepper, potato, raspberry, soybean, squash, strawberry, and tomato — across 39 total classes including healthy baselines.</p>
+        </div>
+        <div class="panel about-panel">
+          <div class="panel-title">Reading the gauge</div>
+          <p class="about-text">The dial color reflects diagnosis, not just confidence: <b class="status-teal">teal</b> for a healthy call, <b class="status-amber">amber</b> for a lower-confidence or moderate call, <b class="status-coral">coral</b> for a disease diagnosis. This is a student project — not a substitute for agronomic advice.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
